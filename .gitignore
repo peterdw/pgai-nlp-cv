@@ -1,0 +1,22 @@
+# Ignore everything
+*
+
+# Exceptions
+!.gitignore
+!.gitattributes
+!requirements.txt
+!preprocess_mails.py
+!bert-lora.py
+!frm-compare-textbody.py
+
+# Allow data
+!data/
+!data/lid.176.bin
+
+# Allow models
+!models/
+!models/bert-email-complaint-lora/
+
+# Allow modules folder and its contents
+!modules/
+!modules/**
