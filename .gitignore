@@ -16,6 +16,7 @@
 # Allow models
 !models/
 !models/bert-email-complaint-lora/
+!models/bert-email-complaint-lora/**
 
 # Allow modules folder and its contents
 !modules/
