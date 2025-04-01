@@ -21,3 +21,5 @@
 !modules/
 !modules/**
 !modules/__pycache__/
+
+!data/bert_test_predictions.csv
