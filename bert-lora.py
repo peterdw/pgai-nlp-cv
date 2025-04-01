@@ -98,7 +98,7 @@ training_args = TrainingArguments(
     learning_rate=2e-5,
     per_device_train_batch_size=16,
     per_device_eval_batch_size=16,
-    num_train_epochs=1,
+    num_train_epochs=3,
     weight_decay=0.01,
     load_best_model_at_end=True,
     metric_for_best_model="f1",
@@ -172,12 +172,11 @@ test_df["PredictedLabel"] = test_df["PredictedLabel"].map({0: False, 1: True})
 test_df[["ProcessedTextBody", "TrueLabel", "PredictedLabel", "Correct"]].to_csv("data/bert_test_predictions.csv",
                                                                                 index=False)
 
-# Show sample predictions
-print(test_df.sample(10)[["TrueLabel", "PredictedLabel", "Correct"]])
+# Save incorrect predictions
+incorrect_predictions = test_df[~test_df["Correct"]]
+incorrect_predictions.to_csv("data/bert_incorrect_predictions.csv", index=False)
 
 # 14. Reload fine-tuned model
-
-
 config = PeftConfig.from_pretrained("models/bert-email-complaint-lora")
 base_model = BertForSequenceClassification.from_pretrained(config.base_model_name_or_path, num_labels=2)
 model = PeftModel.from_pretrained(base_model, "models/bert-email-complaint-lora")

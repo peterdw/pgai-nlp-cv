@@ -20,3 +20,4 @@
 # Allow modules folder and its contents
 !modules/
 !modules/**
+!modules/__pycache__/

@@ -5,6 +5,8 @@ import os
 import json
 
 df = pd.read_feather("data/df_emails_cleaned.feather")
+
+
 # df_emails = read_csv_file("data/emails.csv")
 # print(df_emails.columns)
 
@@ -158,6 +160,16 @@ class TextComparerApp:
         ttk.Checkbutton(search_row, text="Use Regex", variable=self.regex_enabled).pack(side="left", padx=5)
         ttk.Button(search_row, text="🔍 Search", command=self.apply_filter).pack(side="left", padx=5)
         ttk.Button(search_row, text="Clear Search", command=self.clear_filter).pack(side="left", padx=5)
+
+        # === Row 0b: Character Limit ===
+        self.char_limit_var = tk.StringVar()
+        char_limit_row = ttk.Frame(self.top_frame)
+        char_limit_row.grid(row=0, column=2, sticky="w", padx=(10, 0))
+
+        ttk.Label(char_limit_row, text="Max Length:").pack(side="left", padx=(0, 5))
+        self.char_limit_entry = ttk.Entry(char_limit_row, textvariable=self.char_limit_var, width=8)
+        self.char_limit_entry.pack(side="left")
+        self.char_limit_entry.bind("<Return>", lambda e: self.apply_filter())
 
         # === Row 1: Complaint Type ===
         self.complaint_filter_var = tk.StringVar()
@@ -506,6 +518,18 @@ class TextComparerApp:
             else:
                 self.filtered_df = self.filtered_df[
                     self.filtered_df["TextBody"].str.contains(query, case=False, na=False)]
+
+        # === Character Length Filter ===
+        char_limit = self.char_limit_var.get().strip()
+        if char_limit:
+            try:
+                max_length = int(char_limit)
+                self.filtered_df = self.filtered_df[
+                    self.filtered_df["ProcessedTextBody"].str.len() <= max_length
+                    ]
+            except ValueError:
+                messagebox.showwarning("Invalid Input", "Character limit must be an integer.")
+                return
 
         # === Complaint Type Filter ===
         selected_complaint_display = self.complaint_filter_var.get().strip()

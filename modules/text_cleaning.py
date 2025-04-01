@@ -1,4 +1,5 @@
 import re
+import pandas as pd
 
 # Precompiled universal patterns
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
@@ -125,7 +126,7 @@ def strip_flexible_reply_header(text, min_matches=3, max_scan_lines=30):
                 break
 
     if len(set(match_lines)) >= min_matches:
-        return "\n".join(lines[max(match_lines)+1:]).strip()
+        return "\n".join(lines[max(match_lines) + 1:]).strip()
     return text
 
 
@@ -167,3 +168,17 @@ def clean_text(text, replace_sensitive=True):
     text = apply_pattern_substitutions(text, replace_mode=replace_sensitive)
     text = remove_sensitive_lines(text)
     return text.strip()
+
+
+def filter_short_texts(df: pd.DataFrame, column: str = "ProcessedTextBody", threshold: int = 50) -> pd.DataFrame:
+    """
+    Remove rows where the character count of the specified column falls below the given threshold.
+
+    :param df: Input DataFrame.
+    :param column: Column name to check character length.
+    :param threshold: Minimum number of characters required to keep the row.
+    :return: Filtered DataFrame.
+    """
+    if column not in df.columns:
+        raise ValueError(f"Column '{column}' not found in DataFrame.")
+    return df[df[column].str.len() >= threshold].reset_index(drop=True)

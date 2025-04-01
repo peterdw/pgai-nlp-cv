@@ -1,4 +1,5 @@
 from language_detection import detect_languages_fasttext
+from text_cleaning import filter_short_texts
 from utils import read_csv_file, \
     find_all_nan_columns, remove_all_nan_columns, remove_duplicate_columns, clean_both_versions
 from tqdm import tqdm
@@ -154,7 +155,9 @@ def main():
         df_merged = df_merged.head(limit)
 
     df_processed = preprocess(df_merged)
-    return df_processed
+    # Filter out short texts (e.g., less than 80 characters)
+    df_final = filter_short_texts(df_processed, column="ProcessedTextBody", threshold=120)
+    return df_final
 
 
 if __name__ == "__main__":
