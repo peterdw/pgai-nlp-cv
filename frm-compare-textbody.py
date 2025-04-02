@@ -352,28 +352,28 @@ class TextComparerApp:
         text_paned.add(orig_frame, weight=1)
         self.root.after(50, lambda: self.text_body.event_generate("<Configure>"))
 
-        # -- Tagged Mail Section --
-        tagged_frame = ttk.Frame(text_paned)
-        ttk.Label(tagged_frame, text="Tagged Mail").pack(anchor="w", padx=5, pady=(2, 2))
-
-        # Wrapper for text + vertical scrollbar
-        tagged_text_frame = ttk.Frame(tagged_frame)
-        tagged_text_frame.pack(fill="both", expand=True)
-
-        self.tagged_text_body = tk.Text(tagged_text_frame, wrap="none")
-        self.tagged_text_body.pack(side="left", fill="both", expand=True)
-
-        yscroll_tagged = ttk.Scrollbar(tagged_text_frame, orient="vertical", command=self.tagged_text_body.yview)
-        yscroll_tagged.pack(side="right", fill="y")
-        self.tagged_text_body.config(yscrollcommand=yscroll_tagged.set)
-
-        # <-- Horizontal scrollbar now in tagged_text_frame -->
-        xscroll_tagged = ttk.Scrollbar(tagged_frame, orient="horizontal", command=self.tagged_text_body.xview)
-        xscroll_tagged.pack(fill="x")
-        self.tagged_text_body.config(xscrollcommand=xscroll_tagged.set)
-
-        text_paned.add(tagged_frame, weight=1)
-        self.root.after(50, lambda: self.tagged_text_body.event_generate("<Configure>"))
+        # # -- Tagged Mail Section --
+        # tagged_frame = ttk.Frame(text_paned)
+        # ttk.Label(tagged_frame, text="Tagged Mail").pack(anchor="w", padx=5, pady=(2, 2))
+        #
+        # # Wrapper for text + vertical scrollbar
+        # tagged_text_frame = ttk.Frame(tagged_frame)
+        # tagged_text_frame.pack(fill="both", expand=True)
+        #
+        # self.tagged_text_body = tk.Text(tagged_text_frame, wrap="none")
+        # self.tagged_text_body.pack(side="left", fill="both", expand=True)
+        #
+        # yscroll_tagged = ttk.Scrollbar(tagged_text_frame, orient="vertical", command=self.tagged_text_body.yview)
+        # yscroll_tagged.pack(side="right", fill="y")
+        # self.tagged_text_body.config(yscrollcommand=yscroll_tagged.set)
+        #
+        # # <-- Horizontal scrollbar now in tagged_text_frame -->
+        # xscroll_tagged = ttk.Scrollbar(tagged_frame, orient="horizontal", command=self.tagged_text_body.xview)
+        # xscroll_tagged.pack(fill="x")
+        # self.tagged_text_body.config(xscrollcommand=xscroll_tagged.set)
+        #
+        # text_paned.add(tagged_frame, weight=1)
+        # self.root.after(50, lambda: self.tagged_text_body.event_generate("<Configure>"))
 
         # -- Cleaned Mail Section --
         proc_frame = ttk.Frame(text_paned)
@@ -438,14 +438,14 @@ class TextComparerApp:
     def load_record(self):
         self.text_body.delete('1.0', tk.END)
         self.processed_text_body.delete('1.0', tk.END)
-        self.tagged_text_body.delete('1.0', tk.END)
+        # self.tagged_text_body.delete('1.0', tk.END)
 
         row = self.filtered_df.iloc[self.index]
         self.index_id_var.set(str(self.filtered_df.index[self.index] + 1))
 
         self.text_body.insert(tk.END, str(row['TextBody']))
         self.processed_text_body.insert(tk.END, str(row['ProcessedTextBody']))
-        self.tagged_text_body.insert(tk.END, str(row.get('TaggedTextBody', '')))
+        # self.tagged_text_body.insert(tk.END, str(row.get('TaggedTextBody', '')))
 
         # Set subject and language from the row (fallback to empty string if missing)
         self.subject_var.set(str(row.get('Subject', '')))

@@ -42,7 +42,14 @@ DISCARD_PATTERNS = [
     re.compile(r"Please consider the environment.*?email\.", re.IGNORECASE),
     re.compile(r"This message and any attachments are intended only for the addressee.*?", re.IGNORECASE | re.DOTALL),
     re.compile(r"https?://checkpoint\.url-protection\.com/\S+", re.IGNORECASE),
-    re.compile(r"The attached message was sent.*?Sent Items folder after the upgrade\.", re.IGNORECASE | re.DOTALL)
+    re.compile(r"The attached message was sent.*?Sent Items folder after the upgrade\.", re.IGNORECASE | re.DOTALL),
+    re.compile(
+        r"The information contained in this communication is confidential and may be legally privileged\. "
+        r"It is intended solely for the use of the individual or the entity to whom it is addressed and the others authorized to receive it\. "
+        r"If you are not the intended recipient, you are hereby notified that any disclosure, copying, distribution or taking any action in reliance of the contents of this information is strictly prohibited and that the content of the message should be deleted\. "
+        r"Any e-mail messages from Agristo are given in good faith but shall not be binding nor shall they construe any obligation\.",
+        re.IGNORECASE | re.DOTALL
+    )
 ]
 
 # Sensitive info patterns
