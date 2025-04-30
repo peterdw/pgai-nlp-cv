@@ -1,11 +1,28 @@
 from language_detection import detect_languages_fasttext
-from text_cleaning import filter_short_texts
+from text_cleaning import filter_short_texts, clean_text
 from utils import read_csv_file, \
-    find_all_nan_columns, remove_all_nan_columns, remove_duplicate_columns, clean_both_versions
+    find_all_nan_columns, remove_all_nan_columns, remove_duplicate_columns, merge_datasets
 from tqdm import tqdm
 
 
 def preprocess(df_emails):
+    columns_to_keep = [
+        "TextBody",
+        "Subject",
+        "Priority",
+        "AGR_Type_of_Complaint__c",
+        "AGR_Extra_Information_Root_Cause__c",
+        "AGR_Reason_for_Complaint__c",
+        "AGR_Root_Cause__c",
+        "META_SuppliedEmail",
+        "Complaint",
+    ]
+    # Filter op bestaande kolommen, zodat je geen error krijgt als er een niet-bestaande kolom in de lijst staat
+    existing_columns = [col for col in columns_to_keep if col in df_emails.columns]
+
+    # Behoud enkel de gewenste kolommen
+    df_emails = df_emails[existing_columns].copy()
+
     """Cleans emails and detects language using FastText, avoiding redundant operations."""
     if "TextBody" not in df_emails.columns:
         print("⚠️ 'TextBody' column not found.")
@@ -14,7 +31,7 @@ def preprocess(df_emails):
     # Convert to string and apply combined cleaning and tagging in one go
     tqdm.pandas(desc="Cleaning & Tagging Emails")
     df_emails["TextBody"] = df_emails["TextBody"].astype(str)
-    df_emails[["ProcessedTextBody"]] = df_emails.progress_apply(clean_both_versions, axis=1)
+    df_emails["ProcessedTextBody"] = df_emails["TextBody"].progress_apply(clean_text)
 
     # FastText language detection
     df_emails = detect_languages_fasttext(df_emails, text_column="ProcessedTextBody")
@@ -121,7 +138,7 @@ def main():
     df_meta = df_meta.rename(columns=lambda col: f"META_{col}")
 
     # Merge only required columns for efficiency
-    df_merged = df_emails.merge(df_meta, left_on="ParentId", right_on="META_Id", how="inner")
+    df_merged = merge_datasets(df_emails, df_meta, left_on="ParentId", right_on="META_Id", how="inner")
     # Add Complaint column
     df_merged["Complaint"] = (~(
             df_merged["AGR_Type_of_Complaint__c"].isna() |

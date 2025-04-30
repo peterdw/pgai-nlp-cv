@@ -4,7 +4,7 @@ import pandas as pd
 # Precompiled universal patterns
 HTML_TAG_PATTERN = re.compile(r"<[^>]+>")
 HTTP_BRACKET_PATTERN = re.compile(r"\[https?://[^]]+]", re.IGNORECASE)
-EMPTY_LINES_PATTERN = re.compile(r"\n\s*\n")
+EMPTY_LINES_PATTERN = re.compile(r"(?m)^[ \t]+$\n?")
 NON_PRINTABLE_REGEX = re.compile(r'[\x00-\x08\x0B\x0C\x0E-\x1F\x7F-\x9F\u200b\u200c\u200d\u2060\ufeff]')
 
 # Common header keywords (multi-language)
@@ -73,10 +73,47 @@ PATTERN_REPLACEMENTS = {
     re.compile(rf"{TITLE}", re.IGNORECASE): "[TITLE]",
 }
 
+# Matches the full-line thread ID (only content on the line)
+THREAD_ID_LINE_PATTERN = re.compile(r"^\s*thread::[a-zA-Z0-9]+(?:::)?\s*$", re.IGNORECASE)
+
+# Matches [ thread::...:: ] with optional spaces
+BRACKETED_THREAD_PATTERN = re.compile(r"\[\s*thread::[a-zA-Z0-9]+(?:::)?\s*\]", re.IGNORECASE)
+
+CID_IMAGE_PATTERN = re.compile(r"\[cid:[^]]+]", re.IGNORECASE)
+
 
 # ----------------------------
 # Cleaning Functions
 # ----------------------------
+
+def remove_cid_references(text):
+    return CID_IMAGE_PATTERN.sub("", text) if isinstance(text, str) else text
+
+
+def clean_thread_ids(text):
+    if not isinstance(text, str):
+        return text
+
+    subject_keywords = HEADER_KEYWORDS.get("subject", [])
+    cleaned_lines = []
+
+    for line in text.splitlines():
+        # Remove [ thread::...:: ] with brackets
+        line = BRACKETED_THREAD_PATTERN.sub("", line)
+
+        # Remove any remaining thread::...:: patterns (including special characters, safely)
+        line = THREAD_ID_LINE_PATTERN.sub("", line) if THREAD_ID_LINE_PATTERN.fullmatch(line.strip()) else \
+            re.sub(r"thread::[^:\]\s]+(?:::)?", "", line, flags=re.IGNORECASE)
+
+        # Clean thread ID from subject-like lines
+        lower = line.strip().lower()
+        if any(lower.startswith(k + ":") for k in subject_keywords):
+            line = BRACKETED_THREAD_PATTERN.sub("", line).strip()
+
+        cleaned_lines.append(line.strip())
+
+    return "\n".join(cleaned_lines)
+
 
 def remove_http_bracket_lines(text):
     return HTTP_BRACKET_PATTERN.sub("", text) if isinstance(text, str) else text
@@ -91,16 +128,22 @@ def reduce_multiple_spaces(text):
 
 
 def remove_empty_lines(text):
-    return EMPTY_LINES_PATTERN.sub("\n", text)
+    if not isinstance(text, str):
+        return text
+    # Remove lines with only whitespace
+    text = EMPTY_LINES_PATTERN.sub("", text)
+    # Then collapse multiple empty lines to one
+    text = re.sub(r"\n\s*\n", "\n", text)
+    return text.strip()
 
 
 def remove_html(text):
     return HTML_TAG_PATTERN.sub(" ", text)
 
 
-def apply_pattern_substitutions(text, replace_mode=True):
+def apply_pattern_substitutions(text):
     for pattern, token in PATTERN_REPLACEMENTS.items():
-        text = pattern.sub(token if replace_mode else "", text)
+        text = pattern.sub("", text)
     return text
 
 
@@ -127,22 +170,29 @@ def strip_flexible_reply_header(text, min_matches=3, max_scan_lines=30):
     offset = len(lines) - len(lower_lines)
 
     for i, line in enumerate(lower_lines):
-        for keywords in HEADER_KEYWORDS.values():
+        for key, keywords in HEADER_KEYWORDS.items():
             if any(line.strip().startswith(k + ":") for k in keywords):
-                match_lines.append(offset + i)
+                match_lines.append((offset + i, key))
                 break
 
-    if len(set(match_lines)) >= min_matches:
-        return "\n".join(lines[max(match_lines) + 1:]).strip()
+    if len({k for _, k in match_lines}) >= min_matches:
+        # Find the first occurrence of a subject-like line
+        for idx, key in match_lines:
+            if key == "subject":
+                return "\n".join(lines[idx:]).strip()  # Preserve from "Subject:" line onward
+        # fallback to old behavior if no subject found
+        return "\n".join(lines[max(i for i, _ in match_lines) + 1:]).strip()
+
     return text
 
 
 def remove_sensitive_lines(text):
     lines = []
     for line in text.splitlines():
-        if not line.strip():
+        stripped = line.strip()
+        if not stripped:
             lines.append(line)
-        elif not SENSITIVE_LINE_PATTERN.match(line.strip()):
+        elif not re.search(SENSITIVE_LINE_PATTERN, stripped):
             lines.append(line)
     return "\n".join(lines)
 
@@ -161,18 +211,20 @@ def clean_crlf(text):
     return text.replace("\n", " ").replace("\r", " ").strip() if isinstance(text, str) else ""
 
 
-def clean_text(text, replace_sensitive=True):
+def clean_text(text):
     if not isinstance(text, str):
         return ""
+    text = strip_flexible_reply_header(text)
     text = remove_empty_lines(text)
     text = reduce_multiple_spaces(text)
     text = remove_non_printable(text)
     text = remove_http_bracket_lines(text)
-    text = strip_flexible_reply_header(text)
+    text = clean_thread_ids(text)
+    text = remove_cid_references(text)
     text = strip_known_reply_headers(text)
     text = remove_html(text)
     text = apply_discard_patterns(text)
-    text = apply_pattern_substitutions(text, replace_mode=replace_sensitive)
+    # text = apply_pattern_substitutions(text)
     text = remove_sensitive_lines(text)
     return text.strip()
 

@@ -77,14 +77,6 @@ def find_all_nan_columns(df):
     return nan_columns
 
 
-def clean_both_versions(row):
-    text = row["TextBody"]  # or whatever your original column is called
-    return pd.Series({
-        "ProcessedTextBody": clean_text(text, replace_sensitive=False),
-        # "TaggedTextBody": clean_text(text, replace_sensitive=True)
-    })
-
-
 def detect_language_fast(texts):
     """Performs batch language detection for efficiency."""
     languages = []
@@ -126,53 +118,6 @@ def read_csv_file(file_path):
         return None
 
 
-def prefix_metadata_columns(metadata_df):
-    """Prefixes metadata columns with 'AGR_' if not already prefixed."""
-    return metadata_df.rename(columns=lambda col: col if col.startswith("AGR_") else f"AGR_{col}")
-
-
-def merge_datasets(emails_df, metadata_df, left_on="ParentId", right_on="AGR_Id"):
+def merge_datasets(emails_df, metadata_df, left_on="ParentId", right_on="AGR_Id", how="inner"):
     """Merges emails DataFrame with metadata DataFrame on ParentId -> AGR_Id."""
-    return emails_df.merge(metadata_df, left_on=left_on, right_on=right_on, how="left")
-
-
-def save_to_csv(df, output_file, record_limit=100):
-    """Saves DataFrame to a CSV file with UTF-8 BOM encoding."""
-    df.head(record_limit).to_csv(output_file, sep=';', index=False, encoding='utf-8-sig')
-    print(f"✅ Merged file saved as: {output_file}")
-
-
-def count_matching_records(df_metadata, df_emails, fieldName1, fieldName2):
-    """
-    Counts how many records in df_metadata have a matching record in df_emails.
-
-    Parameters:
-    - df_metadata: Pandas DataFrame containing metadata records.
-    - df_emails: Pandas DataFrame containing email records.
-    - fieldName1: Column name in df_metadata to match.
-    - fieldName2: Column name in df_emails to match.
-
-    Returns:
-    - match_count: Number of matching records
-    """
-
-    # Ensure column names exist
-    if fieldName1 not in df_metadata.columns or fieldName2 not in df_emails.columns:
-        print(f"❌ Error: One of the specified fields ({fieldName1}, {fieldName2}) does not exist in the dataframes.")
-        return None
-
-    # Count matching records
-    match_count = df_metadata[fieldName1].isin(df_emails[fieldName2]).sum()
-
-    # Print results
-    print(
-        f"🔍 Matching records between '{fieldName1}' (metadata) and '{fieldName2}' (emails): {match_count}/{len(df_metadata)}")
-
-    return match_count
-
-
-def clean_text_column(df, source_col="TextBody", target_col="ProcessedTextBody"):
-    pandarallel.initialize(progress_bar=True)
-    df[source_col] = df[source_col].astype(str)
-    df[target_col] = df[source_col].parallel_apply(lambda x: clean_text(x, replace_sensitive=False))
-    return df
+    return emails_df.merge(metadata_df, left_on=left_on, right_on=right_on, how=how)

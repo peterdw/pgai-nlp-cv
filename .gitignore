@@ -25,3 +25,4 @@ modules/__pycache__/
 
 !data/bert_test_predictions.csv
 !data/df_emails_cleaned.feather
+/models/bert-email-complaint-lora/

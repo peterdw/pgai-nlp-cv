@@ -4,12 +4,13 @@ from tkinter import ttk, messagebox
 import os
 import json
 
+from utils import read_csv_file
+
 df = pd.read_feather("data/df_emails_cleaned.feather")
 
-
-# df_emails = read_csv_file("data/emails.csv")
-# print(df_emails.columns)
-
+# df_emails = read_csv_file("data/metadata.csv")
+# print(df.columns)
+# print('META_SuppliedEmail' in df.columns)
 
 class TextComparerApp:
     def __init__(self, root, dataframe):
@@ -20,7 +21,7 @@ class TextComparerApp:
         self.history_file = "search_history.json"
         self.search_history = self.load_search_history()
         self.scroll_job = None
-        self.scroll_delay = 100  # milliseconds between scroll steps
+        self.scroll_delay = 250  # milliseconds between scroll steps
         self.scroll_mode = None  # 'next' or 'prev'
 
         self.root.title("Text Comparer")
@@ -299,6 +300,11 @@ class TextComparerApp:
         self.subject_entry = ttk.Entry(left_pane, textvariable=self.subject_var, width=30, state='readonly')
         self.subject_entry.pack(fill="x", padx=5, pady=(0, 10))
 
+        ttk.Label(left_pane, text="Supplied Email:").pack(anchor="w", padx=5, pady=(0, 2))
+        self.supplied_email_var = tk.StringVar()
+        self.supplied_email_entry = ttk.Entry(left_pane, textvariable=self.supplied_email_var, width=30, state='readonly')
+        self.supplied_email_entry.pack(fill="x", padx=5)
+
         ttk.Label(left_pane, text="Language:").pack(anchor="w", padx=5, pady=(0, 2))
         self.language_var = tk.StringVar()
         self.language_entry = ttk.Entry(left_pane, textvariable=self.language_var, width=30, state='readonly')
@@ -449,6 +455,7 @@ class TextComparerApp:
 
         # Set subject and language from the row (fallback to empty string if missing)
         self.subject_var.set(str(row.get('Subject', '')))
+        self.supplied_email_var.set(str(row.get('META_SuppliedEmail', '')))
         self.language_var.set(str(row.get('Language', '')))
         self.complaint_type_var.set(str(row.get("AGR_Type_of_Complaint__c", "")))
         self.reason_var.set(str(row.get("AGR_Reason_for_Complaint__c", "")))
