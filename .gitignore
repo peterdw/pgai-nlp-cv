@@ -6,7 +6,6 @@
 !.gitattributes
 !requirements.txt
 !preprocess_mails.py
-!bert-lora.py
 !frm-compare-textbody.py
 
 # Allow data
