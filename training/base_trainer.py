@@ -1,30 +1,45 @@
 import os
 import json
+import shutil
 import traceback
 from datetime import datetime
-
 import torch
+import numpy as np
 import matplotlib.pyplot as plt
+import torch.nn as nn
+from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from sklearn.utils.class_weight import compute_class_weight
 from transformers import (
     AutoTokenizer, Trainer, TrainingArguments,
-    AutoModelForSequenceClassification,
+    AutoModelForSequenceClassification, BitsAndBytesConfig,
     DataCollatorWithPadding, EarlyStoppingCallback
 )
-from peft import get_peft_model, LoraConfig, TaskType, prepare_model_for_kbit_training
-from transformers import BitsAndBytesConfig
-from sklearn.metrics import accuracy_score, precision_recall_fscore_support
+from peft import get_peft_model, LoraConfig, TaskType, prepare_model_for_kbit_training, PeftModel
+
+from custom_trainer import WeightedLossTrainer
 
 
 class BaseTrainer:
-    def __init__(self, model_name="bert-base-uncased", precision_mode="16bit", num_labels=2,
-                 num_train_epochs=10, model_dir="models/default"):
+    def __init__(self,
+                 model_name="bert-base-uncased",
+                 precision_mode="16bit",
+                 num_labels=2,
+                 num_train_epochs=3,
+                 model_dir="models/default",
+                 data_file="data/df_emails_cleaned.feather",
+                 split_ratio=(0.7, 0.15, 0.15)):
         self.model_name = model_name
+        self.tokenizer = AutoTokenizer.from_pretrained(model_name)
         self.precision_mode = precision_mode
         self.num_train_epochs = num_train_epochs
         self.num_labels = num_labels
         self.model_dir = model_dir
+        self.data_file = data_file
+        self.split_ratio = split_ratio
 
         os.makedirs(self.model_dir, exist_ok=True)
+
+        self.model = None  # to avoid IDE warning
 
     def load_and_prepare_data(self):
         """
@@ -34,7 +49,7 @@ class BaseTrainer:
         raise NotImplementedError
 
     def preprocess(self, dataset):
-        tokenizer = AutoTokenizer.from_pretrained(self.model_name)
+        tokenizer = self.tokenizer
 
         def tokenize(example):
             return tokenizer(example["ProcessedTextBody"], truncation=True, max_length=256)
@@ -75,15 +90,19 @@ class BaseTrainer:
         model = get_peft_model(model, peft_config)
         return model
 
+    def compute_class_weights(self, labels):
+        class_weights = compute_class_weight(
+            class_weight="balanced",
+            classes=np.unique(labels),
+            y=labels
+        )
+        return torch.tensor(class_weights, dtype=torch.float)
+
     def compute_metrics(self, eval_pred):
         logits, labels = eval_pred
         predictions = torch.argmax(torch.tensor(logits), dim=-1).numpy()
 
-        if self.num_labels == 2:
-            avg = "binary"
-        else:
-            avg = "macro"
-
+        avg = "binary" if self.num_labels == 2 else "macro"
         precision, recall, f1, _ = precision_recall_fscore_support(labels, predictions, average=avg)
         acc = accuracy_score(labels, predictions)
 
@@ -92,10 +111,11 @@ class BaseTrainer:
     def train(self):
         dataset, train_df, val_df, test_df = self.load_and_prepare_data()
         tokenized_datasets, tokenizer = self.preprocess(dataset)
-        model = self.build_model()
+        self.model = self.build_model()
 
         training_args = TrainingArguments(
             output_dir=self.model_dir,
+            logging_dir=os.path.join(self.model_dir, "logs"),
             eval_strategy="epoch",
             save_strategy="epoch",
             logging_strategy="epoch",
@@ -107,18 +127,21 @@ class BaseTrainer:
             load_best_model_at_end=True,
             metric_for_best_model="f1",
             fp16=(self.precision_mode == "16bit"),
-            report_to="none",
+            logging_steps=10,
+            report_to="tensorboard",
         )
 
-        trainer = Trainer(
-            model=model,
+        class_weights = self.compute_class_weights(train_df["label"].values).to(self.model.device)
+
+        trainer = WeightedLossTrainer(
+            model=self.model,
             args=training_args,
             train_dataset=tokenized_datasets["train"],
             eval_dataset=tokenized_datasets["validation"],
-            tokenizer=tokenizer,
-            data_collator=DataCollatorWithPadding(tokenizer=tokenizer),
+            data_collator=DataCollatorWithPadding(tokenizer=self.tokenizer),
             compute_metrics=self.compute_metrics,
             callbacks=[EarlyStoppingCallback(early_stopping_patience=2)],
+            class_weights=class_weights
         )
 
         try:
@@ -126,18 +149,49 @@ class BaseTrainer:
         except Exception:
             traceback.print_exc()
 
-        # Save artifacts
-        model.save_pretrained(self.model_dir)
-        tokenizer.save_pretrained(self.model_dir)
+        if isinstance(self.model, PeftModel):
+            # Save adapter model separately for inspection/debug
+            adapter_dir = self.model_dir + "_adapter"
+            print(f"💾 Saving adapter model to: {adapter_dir}")
+            os.makedirs(adapter_dir, exist_ok=True)
+            self.model.save_pretrained(adapter_dir)
+            self.tokenizer.save_pretrained(adapter_dir)
+
+            # Merge adapter into base model
+            print("🔁 Merging LoRA adapter into base model...")
+            merged_model = self.model.merge_and_unload()
+
+            # Clean main model directory
+            if os.path.exists(self.model_dir):
+                print(f"🧹 Cleaning model directory: {self.model_dir}")
+                for filename in os.listdir(self.model_dir):
+                    file_path = os.path.join(self.model_dir, filename)
+                    try:
+                        if os.path.isfile(file_path) or os.path.islink(file_path):
+                            os.unlink(file_path)
+                        elif os.path.isdir(file_path):
+                            shutil.rmtree(file_path)
+                    except Exception as e:
+                        print(f"⚠️ Failed to delete {file_path}: {e}")
+
+            # Save merged model
+            merged_model.save_pretrained(self.model_dir)
+            self.tokenizer.save_pretrained(self.model_dir)
+            print(f"✅ Merged model saved to: {self.model_dir}")
+        else:
+            # If not a PEFT model, just save the model directly
+            self.model.save_pretrained(self.model_dir)
+            self.tokenizer.save_pretrained(self.model_dir)
+
+        # Save quantization info
         with open(os.path.join(self.model_dir, "quantization_config.json"), "w") as f:
             json.dump({"quantization_bits": self.precision_mode}, f, indent=2)
 
-        # Evaluation and metrics
+        # Evaluate on test set
         predictions = trainer.predict(tokenized_datasets["test"])
         y_true = predictions.label_ids
         y_pred = predictions.predictions.argmax(-1)
 
-        # Save prediction results to CSV
         test_df = test_df.reset_index(drop=True)
         test_df["TrueLabel"] = y_true
         test_df["PredictedLabel"] = y_pred
@@ -146,32 +200,19 @@ class BaseTrainer:
         test_df.to_csv(os.path.join(self.model_dir, "test_predictions.csv"), index=False)
         test_df[~test_df["Correct"]].to_csv(os.path.join(self.model_dir, "incorrect_predictions.csv"), index=False)
 
-        # Save logs
         timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
         log_file = os.path.join(self.model_dir, f"training_logs_{timestamp}.json")
         with open(log_file, "w") as f:
             json.dump(trainer.state.log_history, f, indent=2)
 
-        # Calculate and save final metrics
-        if self.num_labels == 2:
-            avg = "binary"
-        else:
-            avg = "macro"
-
+        avg = "binary" if self.num_labels == 2 else "macro"
         precision, recall, f1, _ = precision_recall_fscore_support(y_true, y_pred, average=avg)
         acc = accuracy_score(y_true, y_pred)
 
-        final_metrics = {
-            "accuracy": acc,
-            "f1": f1,
-            "precision": precision,
-            "recall": recall
-        }
+        final_metrics = {"accuracy": acc, "f1": f1, "precision": precision, "recall": recall}
         self.save_final_metrics(final_metrics)
 
-        # Plot training curves
         self.plot_training_curves(trainer.state.log_history)
-
         print("✅ Training logs saved to:", log_file)
 
     def plot_training_curves(self, training_logs):
