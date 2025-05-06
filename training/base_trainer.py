@@ -57,12 +57,32 @@ class BaseTrainer:
         return dataset.map(tokenize, batched=True), tokenizer
 
     def build_model(self):
+
+        # Dynamically determine target_modules
+        target_modules_map = {
+            "xlm-roberta": ["q_proj", "v_proj"],
+            "distilbert": ["q_lin", "v_lin"],
+            "bert": ["query", "value"],
+            "roberta": ["query", "value"],
+        }
+
+        # Default fallback (can be empty, or raise if not found)
+        matched_modules = None
+        for key, modules in target_modules_map.items():
+            if key in self.model_name.lower():
+                matched_modules = modules
+                break
+
+        if matched_modules is None:
+            raise ValueError(f"Could not determine `target_modules` for model: {self.model_name}")
+
         peft_config = LoraConfig(
             task_type=TaskType.SEQ_CLS,
             inference_mode=False,
             r=8,
             lora_alpha=32,
             lora_dropout=0.1,
+            target_modules=matched_modules,
         )
 
         if self.precision_mode in ["4bit", "8bit"]:
